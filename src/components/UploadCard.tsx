@@ -1,5 +1,7 @@
 "use client";
 
+import { supabase } from "@/lib/supabase/client";
+import { nanoid } from "nanoid";
 import { QRCodeCanvas } from "qrcode.react";
 import { useState, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
@@ -30,61 +32,84 @@ export default function UploadCard() {
   const [expired, setExpired] = useState(false);
 
   async function uploadFile(file: File) {
-    if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
-      setMessage("Video and audio files are not supported");
-      setMessageType("error");
-      return;
-    }
-
-    if (file.size > MAX_FILE_SIZE) {
-      setMessage("File exceeds 50MB limit");
-      setMessageType("error");
-      return;
-    }
-
-    setSelectedFile(file);
-    setLoading(true);
-    setProgress(0);
-    setMessage("");
-    setAccessCode("");
-    setIsAccessed(false);
-    setExpired(false);
-
-    const formData = new FormData();
-    formData.append("file", file);
-
-    const xhr = new XMLHttpRequest();
-
-    xhr.upload.onprogress = (event) => {
-      if (event.lengthComputable) {
-        setProgress(Math.round((event.loaded / event.total) * 100));
-      }
-    };
-
-    xhr.onload = () => {
-      const data = JSON.parse(xhr.responseText);
-
-      if (data.success) {
-        setAccessCode(data.accessCode);
-        setMessage("File uploaded successfully");
-        setMessageType("success");
-      } else {
-        setMessage(data.error || "Upload failed");
-        setMessageType("error");
-      }
-
-      setLoading(false);
-    };
-
-    xhr.onerror = () => {
-      setMessage("Upload failed");
-      setMessageType("error");
-      setLoading(false);
-    };
-
-    xhr.open("POST", "/api/upload");
-    xhr.send(formData);
+  if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+    setMessage("Video and audio files are not supported");
+    setMessageType("error");
+    return;
   }
+
+  if (file.size > MAX_FILE_SIZE) {
+    setMessage("File exceeds 50MB limit");
+    setMessageType("error");
+    return;
+  }
+
+  setSelectedFile(file);
+  setLoading(true);
+  setProgress(0);
+  setMessage("");
+  setAccessCode("");
+  setIsAccessed(false);
+  setExpired(false);
+
+  try {
+    // Generate access code
+    const accessCode = nanoid(6).toUpperCase();
+
+    // Keep original filename
+    const filePath = `${accessCode}/${file.name}`;
+
+    // Upload directly to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from("temp-files")
+      .upload(filePath, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
+
+    if (uploadError) {
+      throw new Error(uploadError.message);
+    }
+
+    setProgress(95);
+
+    // Save metadata in database
+    const response = await fetch("/api/create-upload", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        accessCode,
+        fileName: file.name,
+        filePath,
+        fileSize: file.size,
+        mimeType: file.type || "application/octet-stream",
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || "Failed to create upload");
+    }
+
+    setProgress(100);
+    setAccessCode(data.accessCode);
+    setMessage("File uploaded successfully");
+    setMessageType("success");
+
+  } catch (err: unknown) {
+  if (err instanceof Error) {
+    setMessage(err.message);
+  } else {
+    setMessage("Upload failed");
+  }
+  setMessageType("error");
+} finally {
+    setLoading(false);
+  }
+}
 
   async function checkStatus() {
     if (!accessCode || isAccessed || expired) return;
@@ -265,8 +290,17 @@ export default function UploadCard() {
           <p className="font-mono text-[10px] text-[#8884a0] text-center mt-3 tracking-wide">
             all file types supported except video & audio · max 50 MB
           </p>
+
+
         </>
       )}
+
+
+      {checkingStatus && (
+  <p className="text-xs text-gray-400">
+    Checking status...
+  </p>
+)}
 
       {selectedFile && !loading && !accessCode && (
         <div className="mt-4 flex items-center gap-3 bg-[#16161f] border border-[#2a2a38] rounded-xl px-4 py-3">
