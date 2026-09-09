@@ -3,6 +3,30 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   try {
+
+     // Cleanup expired files first
+    const now = new Date().toISOString();
+
+    const { data: expiredFiles, error: cleanupError } = await supabaseAdmin
+  .from("temporary_files")
+  .select("file_path")
+  .lt("expires_at", now);
+
+    if (cleanupError) {
+  console.error("Cleanup error:", cleanupError);
+} 
+    for (const file of expiredFiles || []) {
+      await supabaseAdmin.storage
+        .from("temp-files")
+        .remove([file.file_path]);
+    }
+
+    await supabaseAdmin
+      .from("temporary_files")
+      .delete()
+      .lt("expires_at", now);
+
+    
     const {
       accessCode,
       fileName,

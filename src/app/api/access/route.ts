@@ -14,7 +14,13 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabaseAdmin
       .from("temporary_files")
-      .select("*")
+      .select(`
+  id,
+  file_name,
+  file_path,
+  expires_at,
+  is_active
+`)
       .eq("access_code", accessCode.toUpperCase())
       .eq("is_active", true)
       .single();
@@ -28,9 +34,17 @@ export async function POST(request: Request) {
 
     // Expiry check
     if (data.expires_at && new Date(data.expires_at) < new Date()) {
-      await supabaseAdmin.storage
-        .from("temp-files")
-        .remove([data.file_path]);
+      const { error: storageError } =
+  await supabaseAdmin.storage
+    .from("temp-files")
+    .remove([data.file_path]);
+
+if (storageError) {
+  console.error(
+    "Storage delete failed:",
+    storageError.message
+  );
+}
 
       await supabaseAdmin
         .from("temporary_files")
