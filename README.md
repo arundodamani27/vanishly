@@ -1,16 +1,16 @@
-# SnapBridge 🚀
+# vanishly 🚀
 
-SnapBridge is a secure temporary file transfer web application that enables instant device-to-device file sharing without requiring login, email, USB drives, or third-party apps.
+vanishly is a secure temporary file transfer web application that enables instant device-to-device file sharing without requiring login, email, USB drives, or third-party apps.
 
 It was built to solve a real problem observed during college presentations, where students wasted time logging into Gmail on classroom systems just to transfer PPT files.
 
-SnapBridge makes file sharing fast, simple, and secure.
+vanishly makes file sharing fast, simple, and secure.
 
 ---
 
 ## Live Demo
 
-🔗 https://snapbridge.vercel.app
+🔗 https://vanishly.vercel.app
 
 ---
 
@@ -29,7 +29,7 @@ Typical process:
 
 This wastes time and causes delays.
 
-SnapBridge solves this by allowing instant temporary file transfer between devices.
+vanishly solves this by allowing instant temporary file transfer between devices.
 
 ---
 
@@ -114,7 +114,7 @@ Examples of supported files:
 ## How It Works
 
 ### Upload
-1. Open SnapBridge
+1. Open vanishly
 2. Drag & drop or choose file
 3. Upload completes
 4. Get:
@@ -126,7 +126,7 @@ Examples of supported files:
 On another device:
 
 Option 1:
-- Open SnapBridge
+- Open vanishly
 - Enter access code
 - Download file
 
@@ -143,7 +143,7 @@ Option 3:
 ## Project Structure
 
 ```bash
-snapbridge/
+vanishly/
 │
 ├── src/
 │   ├── app/
@@ -175,13 +175,13 @@ snapbridge/
 ### Clone Repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/snapbridge.git
+git clone https://github.com/YOUR_USERNAME/vanishly.git
 ```
 
 ### Move Into Project
 
 ```bash
-cd snapbridge
+cd vanishly
 ```
 
 ### Install Dependencies
@@ -343,7 +343,7 @@ This project was inspired by a real college classroom problem.
 
 During presentations, teams struggled to quickly transfer PPT files to the classroom computer.
 
-Instead of relying on Gmail logins, USB drives, or messaging apps, SnapBridge was created as a simple instant solution.
+Instead of relying on Gmail logins, USB drives, or messaging apps, vanishly was created as a simple instant solution.
 
 A small real-world inconvenience became a full-stack project.
 
