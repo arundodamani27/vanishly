@@ -1,6 +1,6 @@
-# vanishly 🚀
+# VanishlyShare 🚀
 
-vanishly is a secure temporary file transfer web application that enables instant device-to-device file sharing without requiring login, email, USB drives, or third-party apps.
+VanishlyShare is a secure temporary file transfer web application that enables instant device-to-device file sharing without requiring login, email, USB drives, or third-party apps.
 
 It was built to solve a real problem observed during college presentations, where students wasted time logging into Gmail on classroom systems just to transfer PPT files.
 
@@ -10,7 +10,7 @@ vanishly makes file sharing fast, simple, and secure.
 
 ## Live Demo
 
-🔗 https://vanishly.vercel.app
+🔗 https://vanishly-share.vercel.app
 
 ---
 
@@ -29,7 +29,7 @@ Typical process:
 
 This wastes time and causes delays.
 
-vanishly solves this by allowing instant temporary file transfer between devices.
+VanishlyShare solves this by allowing instant temporary file transfer between devices.
 
 ---
 
@@ -126,7 +126,7 @@ Examples of supported files:
 On another device:
 
 Option 1:
-- Open vanishly
+- Open VanishlyShare
 - Enter access code
 - Download file
 
