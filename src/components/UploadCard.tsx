@@ -14,7 +14,7 @@ import {
   Loader2,
 } from "lucide-react";
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024;
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 interface UploadResponse {
   success: boolean;
@@ -289,9 +289,7 @@ export default function UploadCard() {
         </>
       )}
 
-      {checkingStatus && (
-        <p className="text-xs text-gray-400">Checking status...</p>
-      )}
+      
 
       {selectedFiles.length > 0 && !loading && !accessCode && (
         <div className="mt-4 space-y-2">

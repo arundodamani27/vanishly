@@ -2,13 +2,12 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { customAlphabet } from "nanoid";
 
-const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_FILES = 20; // sanity cap per batch
+const MAX_FILE_SIZE = 100 * 1024 * 1024; // 50MB
+const MAX_FILES = 10; // sanity cap per batch
 
 const BLOCKED_EXTENSIONS = [
   ".exe", ".msi", ".bat", ".cmd", ".scr", ".com", ".dll", ".sys",
-  ".sh", ".ps1", ".vbs", ".apk", ".html", ".htm", ".svg",
-  ".zip", ".rar", ".7z", ".iso",
+  ".sh", ".ps1", ".vbs", ".apk", ".html", ".htm", ".svg", ".iso",
 ];
 
 function sanitizeFileName(name: string) {

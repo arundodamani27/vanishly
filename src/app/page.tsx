@@ -77,7 +77,7 @@ export default function Home() {
             <h1 className="text-5xl sm:text-6xl font-black tracking-tight text-white mb-6 leading-[1.05] max-w-lg">
               Send a file.
               <br />
-              It's gone in ten minutes.
+              It&apos;s gone in ten minutes.
             </h1>
 
             <p className="text-[#8884a0] text-lg mb-10 max-w-md leading-relaxed">
@@ -219,9 +219,9 @@ export default function Home() {
               Nothing to manage, nothing left behind.
             </h2>
             <p className="text-[#8884a0] text-sm leading-relaxed max-w-sm">
-              Vanishly isn't trying to be a file host. It's a hand-off — the
+              Vanishly isn&apos;t trying to be a file host. It&apos;s a hand-off — the
               file exists just long enough to reach the other device, then
-              it's deleted whether you remember to or not.
+              it&apos;s deleted whether you remember to or not.
             </p>
           </div>
 
