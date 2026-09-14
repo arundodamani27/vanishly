@@ -14,7 +14,7 @@ const STEPS = [
   {
     num: "1",
     title: "Drop your file",
-    desc: "Any file up to 50MB — video and audio aren't supported.",
+    desc: "Any file up to 100MB — video and audio aren't supported.",
   },
   {
     num: "2",
@@ -111,7 +111,7 @@ export default function Home() {
 
             <div className="flex gap-8">
               <div>
-                <p className="text-xl font-bold text-white">50MB</p>
+                <p className="text-xl font-bold text-white">100MB</p>
                 <p className="text-xs text-[#8884a0]">max file size</p>
               </div>
               <div className="w-px bg-[#2a2a38]" />
