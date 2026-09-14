@@ -14,34 +14,50 @@ export async function POST(request: Request) {
 
     const { data, error } = await supabaseAdmin
       .from("temporary_files")
-      .select("*")
-      .eq("access_code", accessCode.toUpperCase())
-      .single();
+      .select("id, file_path")
+      .eq("access_code", accessCode.toUpperCase());
 
-    if (error || !data) {
+    if (error || !data || data.length === 0) {
       return NextResponse.json(
         { error: "File not found" },
         { status: 404 }
       );
     }
 
-    // delete from storage
-    await supabaseAdmin.storage
-      .from("temp-files")
-      .remove([data.file_path]);
+    // Delete all files from storage
+    const filePaths = data.map((file) => file.file_path);
 
-    // delete from database
-    await supabaseAdmin
+    const { error: storageError } = await supabaseAdmin.storage
+      .from("temp-files")
+      .remove(filePaths);
+
+    if (storageError) {
+      return NextResponse.json(
+        { error: storageError.message },
+        { status: 500 }
+      );
+    }
+
+    // Delete all DB records for this access code
+    const { error: dbError } = await supabaseAdmin
       .from("temporary_files")
       .delete()
-      .eq("id", data.id);
+      .eq("access_code", accessCode.toUpperCase());
+
+    if (dbError) {
+      return NextResponse.json(
+        { error: dbError.message },
+        { status: 500 }
+      );
+    }
 
     return NextResponse.json({
       success: true,
-      message: "File deleted successfully",
+      message: "Files deleted successfully",
     });
+  } catch (error) {
+    console.error("Delete error:", error);
 
-  } catch {
     return NextResponse.json(
       { error: "Delete failed" },
       { status: 500 }

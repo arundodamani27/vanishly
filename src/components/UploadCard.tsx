@@ -1,7 +1,5 @@
 "use client";
 
-import { supabase } from "@/lib/supabase/client";
-import { nanoid } from "nanoid";
 import { QRCodeCanvas } from "qrcode.react";
 import { useState, useEffect } from "react";
 import { useDropzone } from "react-dropzone";
@@ -18,6 +16,15 @@ import {
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
+interface UploadResponse {
+  success: boolean;
+  accessCode: string;
+  expiresAt: string;
+  uploaded: string[];
+  skipped: string[];
+  error?: string;
+}
+
 export default function UploadCard() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
@@ -31,117 +38,68 @@ export default function UploadCard() {
   const [deleting, setDeleting] = useState(false);
   const [expired, setExpired] = useState(false);
 
+  async function uploadFiles(files: File[]) {
+    if (files.length === 0) return;
 
-async function uploadFiles(files: File[]) {
-  if (files.length === 0) return;
+    setLoading(true);
+    setProgress(0);
+    setMessage("");
+    setAccessCode("");
+    setIsAccessed(false);
+    setExpired(false);
+    setSelectedFiles(files);
 
-  setLoading(true);
-  setProgress(0);
-  setMessage("");
-  setAccessCode("");
-  setIsAccessed(false);
-  setExpired(false);
-  setSelectedFiles(files);
+    const formData = new FormData();
+    files.forEach((file) => formData.append("files", file));
 
-  try {
-    const newAccessCode = nanoid(6).toUpperCase();
+    try {
+      const data = await new Promise<UploadResponse>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open("POST", "/api/upload");
 
-    const uploadedFiles: {
-      fileName: string;
-      filePath: string;
-      fileSize: number;
-      mimeType: string;
-    }[] = [];
+        xhr.upload.onprogress = (event) => {
+          if (event.lengthComputable) {
+            setProgress(Math.round((event.loaded / event.total) * 100));
+          }
+        };
 
-    const skippedFiles: string[] = [];
+        xhr.onload = () => {
+          try {
+            const parsed = JSON.parse(xhr.responseText);
+            if (xhr.status >= 200 && xhr.status < 300 && parsed.success) {
+              resolve(parsed);
+            } else {
+              reject(new Error(parsed.error || "Upload failed"));
+            }
+          } catch {
+            reject(new Error("Unexpected server response"));
+          }
+        };
 
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
+        xhr.onerror = () => reject(new Error("Network error during upload"));
 
-      // Type check
-      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
-        skippedFiles.push(`${file.name} (unsupported type)`);
-        continue;
-      }
-
-      // Size check — MAX_FILE_SIZE was defined but never enforced
-      if (file.size > MAX_FILE_SIZE) {
-        skippedFiles.push(`${file.name} (too large)`);
-        continue;
-      }
-
-      const filePath = `${newAccessCode}/${Date.now()}-${i}-${file.name}`;
-
-      const { error } = await supabase.storage
-        .from("temp-files")
-        .upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
-
-      if (error) {
-        // Roll back files already uploaded in this batch so nothing is orphaned
-        await Promise.all(
-          uploadedFiles.map((f) =>
-            supabase.storage.from("temp-files").remove([f.filePath])
-          )
-        );
-        throw new Error(`Failed on "${file.name}": ${error.message}`);
-      }
-
-      uploadedFiles.push({
-        fileName: file.name,
-        filePath,
-        fileSize: file.size,
-        mimeType: file.type || "application/octet-stream",
+        xhr.send(formData);
       });
 
-      setProgress(Math.round(((i + 1) / files.length) * 90));
-    }
+      setProgress(100);
+      setAccessCode(data.accessCode);
 
-    if (uploadedFiles.length === 0) {
-      throw new Error(
-        skippedFiles.length > 0
-          ? `No valid files. Skipped: ${skippedFiles.join(", ")}`
-          : "No valid files selected."
-      );
-    }
-
-    const response = await fetch("/api/create-upload", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        accessCode: newAccessCode,
-        files: uploadedFiles,
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok || !data.success) {
-      throw new Error(data.error || "Upload failed");
-    }
-
-    setProgress(100);
-    setAccessCode(newAccessCode);
-
-    if (skippedFiles.length > 0) {
-      setMessage(
-        `${uploadedFiles.length} uploaded. Skipped: ${skippedFiles.join(", ")}`
-      );
+      if (data.skipped && data.skipped.length > 0) {
+        setMessage(
+          `${data.uploaded.length} uploaded. Skipped: ${data.skipped.join(", ")}`
+        );
+        setMessageType("error");
+      } else {
+        setMessage(`${data.uploaded.length} files uploaded successfully`);
+        setMessageType("success");
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Upload failed");
       setMessageType("error");
-    } else {
-      setMessage(`${uploadedFiles.length} files uploaded successfully`);
-      setMessageType("success");
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    setMessage(err instanceof Error ? err.message : "Upload failed");
-    setMessageType("error");
-  } finally {
-    setLoading(false);
   }
-}
-  
 
   async function checkStatus() {
     if (!accessCode || isAccessed || expired) return;
@@ -225,20 +183,20 @@ async function uploadFiles(files: File[]) {
     return () => clearInterval(interval);
   }, [accessCode, isAccessed, expired]);
 
-const { getRootProps, getInputProps, isDragActive } = useDropzone({
-  multiple: true,
-  maxSize: MAX_FILE_SIZE,
-  onDrop: (acceptedFiles, fileRejections) => {
-    if (fileRejections.length > 0) {
-      const names = fileRejections.map((r) => r.file.name).join(", ");
-      setMessage(`Rejected (too large): ${names}`);
-      setMessageType("error");
-    }
-    if (acceptedFiles.length > 0) {
-      uploadFiles(acceptedFiles);
-    }
-  },
-});
+  const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    multiple: true,
+    maxSize: MAX_FILE_SIZE,
+    onDrop: (acceptedFiles, fileRejections) => {
+      if (fileRejections.length > 0) {
+        const names = fileRejections.map((r) => r.file.name).join(", ");
+        setMessage(`Rejected (too large): ${names}`);
+        setMessageType("error");
+      }
+      if (acceptedFiles.length > 0) {
+        uploadFiles(acceptedFiles);
+      }
+    },
+  });
 
   function copyToClipboard(text: string, type: "code" | "link") {
     navigator.clipboard.writeText(text);
@@ -296,16 +254,10 @@ const { getRootProps, getInputProps, isDragActive } = useDropzone({
                 </div>
 
                 {selectedFiles.length > 0 && (
-  <p className="font-mono text-[11px] text-[#8884a0] mt-3">
-    {selectedFiles.length} file(s) selected
-  </p>
-)}
-
-                {accessCode && (
-  <p className="text-[#8884a0] text-xs">
-    {selectedFiles.length} files ready to share
-  </p>
-)}
+                  <p className="font-mono text-[11px] text-[#8884a0] mt-3">
+                    {selectedFiles.length} file(s) selected
+                  </p>
+                )}
               </div>
             ) : isDragActive ? (
               <div>
@@ -334,42 +286,37 @@ const { getRootProps, getInputProps, isDragActive } = useDropzone({
           <p className="font-mono text-[10px] text-[#8884a0] text-center mt-3 tracking-wide">
             all file types supported except video & audio · max 50 MB
           </p>
-
-
         </>
       )}
 
-
       {checkingStatus && (
-  <p className="text-xs text-gray-400">
-    Checking status...
-  </p>
-)}
+        <p className="text-xs text-gray-400">Checking status...</p>
+      )}
 
       {selectedFiles.length > 0 && !loading && !accessCode && (
-  <div className="mt-4 space-y-2">
-    {selectedFiles.map((file) => (
-      <div
-        key={`${file.name}-${file.size}`}
-        className="flex items-center gap-3 bg-[#16161f] border border-[#2a2a38] rounded-xl px-4 py-3"
-      >
-        <div className="w-8 h-8 rounded-lg bg-[#7b5ea7]/15 flex items-center justify-center">
-          <FileText size={15} className="text-[#7b5ea7]" />
-        </div>
+        <div className="mt-4 space-y-2">
+          {selectedFiles.map((file) => (
+            <div
+              key={`${file.name}-${file.size}`}
+              className="flex items-center gap-3 bg-[#16161f] border border-[#2a2a38] rounded-xl px-4 py-3"
+            >
+              <div className="w-8 h-8 rounded-lg bg-[#7b5ea7]/15 flex items-center justify-center">
+                <FileText size={15} className="text-[#7b5ea7]" />
+              </div>
 
-        <div className="flex-1 min-w-0">
-          <p className="text-white text-sm font-medium truncate">
-            {file.name}
-          </p>
+              <div className="flex-1 min-w-0">
+                <p className="text-white text-sm font-medium truncate">
+                  {file.name}
+                </p>
 
-          <p className="font-mono text-[11px] text-[#8884a0]">
-            {formatFileSize(file.size)}
-          </p>
+                <p className="font-mono text-[11px] text-[#8884a0]">
+                  {formatFileSize(file.size)}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
-    ))}
-  </div>
-)}
+      )}
 
       {message && !accessCode && (
         <div
