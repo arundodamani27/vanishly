@@ -24,92 +24,124 @@ export default function UploadCard() {
   const [accessCode, setAccessCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [copied, setCopied] = useState<"code" | "link" | null>(null);
   const [isAccessed, setIsAccessed] = useState(false);
   const [checkingStatus, setCheckingStatus] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [expired, setExpired] = useState(false);
 
-  async function uploadFile(file: File) {
-  if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
-    setMessage("Video and audio files are not supported");
-    setMessageType("error");
-    return;
-  }
 
-  if (file.size > MAX_FILE_SIZE) {
-    setMessage("File exceeds 50MB limit");
-    setMessageType("error");
-    return;
-  }
+async function uploadFiles(files: File[]) {
+  if (files.length === 0) return;
 
-  setSelectedFile(file);
   setLoading(true);
   setProgress(0);
   setMessage("");
   setAccessCode("");
   setIsAccessed(false);
   setExpired(false);
+  setSelectedFiles(files);
 
   try {
-    // Generate access code
-    const accessCode = nanoid(6).toUpperCase();
+    const newAccessCode = nanoid(6).toUpperCase();
 
-    // Keep original filename
-    const filePath = `${accessCode}/${file.name}`;
+    const uploadedFiles: {
+      fileName: string;
+      filePath: string;
+      fileSize: number;
+      mimeType: string;
+    }[] = [];
 
-    // Upload directly to Supabase Storage
-    const { error: uploadError } = await supabase.storage
-      .from("temp-files")
-      .upload(filePath, file, {
-        cacheControl: "3600",
-        upsert: false,
-      });
+    const skippedFiles: string[] = [];
 
-    if (uploadError) {
-      throw new Error(uploadError.message);
-    }
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
 
-    setProgress(95);
+      // Type check
+      if (file.type.startsWith("video/") || file.type.startsWith("audio/")) {
+        skippedFiles.push(`${file.name} (unsupported type)`);
+        continue;
+      }
 
-    // Save metadata in database
-    const response = await fetch("/api/create-upload", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        accessCode,
+      // Size check — MAX_FILE_SIZE was defined but never enforced
+      if (file.size > MAX_FILE_SIZE) {
+        skippedFiles.push(`${file.name} (too large)`);
+        continue;
+      }
+
+      const filePath = `${newAccessCode}/${Date.now()}-${i}-${file.name}`;
+
+      const { error } = await supabase.storage
+        .from("temp-files")
+        .upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
+
+      if (error) {
+        // Roll back files already uploaded in this batch so nothing is orphaned
+        await Promise.all(
+          uploadedFiles.map((f) =>
+            supabase.storage.from("temp-files").remove([f.filePath])
+          )
+        );
+        throw new Error(`Failed on "${file.name}": ${error.message}`);
+      }
+
+      uploadedFiles.push({
         fileName: file.name,
         filePath,
         fileSize: file.size,
         mimeType: file.type || "application/octet-stream",
+      });
+
+      setProgress(Math.round(((i + 1) / files.length) * 90));
+    }
+
+    if (uploadedFiles.length === 0) {
+      throw new Error(
+        skippedFiles.length > 0
+          ? `No valid files. Skipped: ${skippedFiles.join(", ")}`
+          : "No valid files selected."
+      );
+    }
+
+    const response = await fetch("/api/create-upload", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessCode: newAccessCode,
+        files: uploadedFiles,
       }),
     });
 
     const data = await response.json();
 
     if (!response.ok || !data.success) {
-      throw new Error(data.error || "Failed to create upload");
+      throw new Error(data.error || "Upload failed");
     }
 
     setProgress(100);
-    setAccessCode(data.accessCode);
-    setMessage("File uploaded successfully");
-    setMessageType("success");
+    setAccessCode(newAccessCode);
 
-  } catch (err: unknown) {
-  if (err instanceof Error) {
-    setMessage(err.message);
-  } else {
-    setMessage("Upload failed");
-  }
-  setMessageType("error");
-} finally {
+    if (skippedFiles.length > 0) {
+      setMessage(
+        `${uploadedFiles.length} uploaded. Skipped: ${skippedFiles.join(", ")}`
+      );
+      setMessageType("error");
+    } else {
+      setMessage(`${uploadedFiles.length} files uploaded successfully`);
+      setMessageType("success");
+    }
+  } catch (err) {
+    setMessage(err instanceof Error ? err.message : "Upload failed");
+    setMessageType("error");
+  } finally {
     setLoading(false);
   }
 }
+  
 
   async function checkStatus() {
     if (!accessCode || isAccessed || expired) return;
@@ -168,7 +200,7 @@ export default function UploadCard() {
         setMessage("File deleted successfully");
         setMessageType("success");
         setAccessCode("");
-        setSelectedFile(null);
+        setSelectedFiles([]);
         setIsAccessed(false);
         setExpired(false);
       } else {
@@ -193,14 +225,20 @@ export default function UploadCard() {
     return () => clearInterval(interval);
   }, [accessCode, isAccessed, expired]);
 
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    multiple: false,
-    onDrop: (acceptedFiles) => {
-      if (acceptedFiles.length > 0) {
-        uploadFile(acceptedFiles[0]);
-      }
-    },
-  });
+const { getRootProps, getInputProps, isDragActive } = useDropzone({
+  multiple: true,
+  maxSize: MAX_FILE_SIZE,
+  onDrop: (acceptedFiles, fileRejections) => {
+    if (fileRejections.length > 0) {
+      const names = fileRejections.map((r) => r.file.name).join(", ");
+      setMessage(`Rejected (too large): ${names}`);
+      setMessageType("error");
+    }
+    if (acceptedFiles.length > 0) {
+      uploadFiles(acceptedFiles);
+    }
+  },
+});
 
   function copyToClipboard(text: string, type: "code" | "link") {
     navigator.clipboard.writeText(text);
@@ -223,7 +261,7 @@ export default function UploadCard() {
         </div>
 
         <h1 className="text-3xl font-black tracking-tight text-white mb-2">
-          Upload <span className="text-[#4fffb0]">file</span>
+          Upload <span className="text-[#4fffb0]">files</span>
         </h1>
 
         <p className="text-[#8884a0] text-sm">
@@ -257,11 +295,17 @@ export default function UploadCard() {
                   />
                 </div>
 
-                {selectedFile && (
-                  <p className="font-mono text-[11px] text-[#8884a0] mt-3 truncate">
-                    {selectedFile.name}
-                  </p>
-                )}
+                {selectedFiles.length > 0 && (
+  <p className="font-mono text-[11px] text-[#8884a0] mt-3">
+    {selectedFiles.length} file(s) selected
+  </p>
+)}
+
+                {accessCode && (
+  <p className="text-[#8884a0] text-xs">
+    {selectedFiles.length} files ready to share
+  </p>
+)}
               </div>
             ) : isDragActive ? (
               <div>
@@ -277,7 +321,7 @@ export default function UploadCard() {
                 </div>
 
                 <p className="text-white font-semibold mb-1">
-                  Drag & drop your file here
+                  Drag & drop files here
                 </p>
 
                 <p className="text-[#8884a0] text-sm">
@@ -302,22 +346,30 @@ export default function UploadCard() {
   </p>
 )}
 
-      {selectedFile && !loading && !accessCode && (
-        <div className="mt-4 flex items-center gap-3 bg-[#16161f] border border-[#2a2a38] rounded-xl px-4 py-3">
-          <div className="w-8 h-8 rounded-lg bg-[#7b5ea7]/15 flex items-center justify-center">
-            <FileText size={15} className="text-[#7b5ea7]" />
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <p className="text-white text-sm font-medium truncate">
-              {selectedFile.name}
-            </p>
-            <p className="font-mono text-[11px] text-[#8884a0]">
-              {formatFileSize(selectedFile.size)}
-            </p>
-          </div>
+      {selectedFiles.length > 0 && !loading && !accessCode && (
+  <div className="mt-4 space-y-2">
+    {selectedFiles.map((file) => (
+      <div
+        key={`${file.name}-${file.size}`}
+        className="flex items-center gap-3 bg-[#16161f] border border-[#2a2a38] rounded-xl px-4 py-3"
+      >
+        <div className="w-8 h-8 rounded-lg bg-[#7b5ea7]/15 flex items-center justify-center">
+          <FileText size={15} className="text-[#7b5ea7]" />
         </div>
-      )}
+
+        <div className="flex-1 min-w-0">
+          <p className="text-white text-sm font-medium truncate">
+            {file.name}
+          </p>
+
+          <p className="font-mono text-[11px] text-[#8884a0]">
+            {formatFileSize(file.size)}
+          </p>
+        </div>
+      </div>
+    ))}
+  </div>
+)}
 
       {message && !accessCode && (
         <div

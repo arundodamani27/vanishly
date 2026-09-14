@@ -15,11 +15,14 @@ export async function POST(request: Request) {
     if (cleanupError) {
   console.error("Cleanup error:", cleanupError);
 } 
-    for (const file of expiredFiles || []) {
-      await supabaseAdmin.storage
-        .from("temp-files")
-        .remove([file.file_path]);
-    }
+ const filePaths =
+  expiredFiles?.map(file => file.file_path) || [];
+
+if (filePaths.length > 0) {
+  await supabaseAdmin.storage
+    .from("temp-files")
+    .remove(filePaths);
+}
 
     await supabaseAdmin
       .from("temporary_files")
@@ -27,21 +30,14 @@ export async function POST(request: Request) {
       .lt("expires_at", now);
 
     
-    const {
-      accessCode,
-      fileName,
-      filePath,
-      fileSize,
-      mimeType,
-    } = await request.json();
+   const { accessCode, files } = await request.json();
 
     if (
-      !accessCode ||
-      !fileName ||
-      !filePath ||
-      !fileSize ||
-      !mimeType
-    ) {
+  !accessCode ||
+  !files ||
+  !Array.isArray(files) ||
+  files.length === 0
+) {
       return NextResponse.json(
         { error: "Missing required fields" },
         { status: 400 }
@@ -50,19 +46,28 @@ export async function POST(request: Request) {
 
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000);
 
-    const { error } = await supabaseAdmin
-      .from("temporary_files")
-      .insert({
-        access_code: accessCode,
-        file_name: fileName,
-        file_path: filePath,
-        mime_type: mimeType,
-        file_size: fileSize,
-        expires_at: expiresAt.toISOString(),
-        is_active: true,
-        is_accessed: false,
-        download_count: 0,
-      });
+    const rows = files.map(
+  (file: {
+    fileName: string;
+    filePath: string;
+    fileSize: number;
+    mimeType: string;
+  }) => ({
+    access_code: accessCode,
+    file_name: file.fileName,
+    file_path: file.filePath,
+    mime_type: file.mimeType,
+    file_size: file.fileSize,
+    expires_at: expiresAt.toISOString(),
+    is_active: true,
+    is_accessed: false,
+    download_count: 0,
+  })
+);
+
+const { error } = await supabaseAdmin
+  .from("temporary_files")
+  .insert(rows);
 
     if (error) {
       return NextResponse.json(
@@ -72,11 +77,11 @@ export async function POST(request: Request) {
     }
 
     return NextResponse.json({
-      success: true,
-      accessCode,
-      expiresAt: expiresAt.toISOString(),
-      fileName,
-    });
+  success: true,
+  accessCode,
+  expiresAt: expiresAt.toISOString(),
+  filesCount: files.length,
+});
 
   } catch (error) {
     console.error(error);

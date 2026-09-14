@@ -13,19 +13,12 @@ export async function POST(request: Request) {
     }
 
     const { data, error } = await supabaseAdmin
-      .from("temporary_files")
-      .select(`
-  id,
-  file_name,
-  file_path,
-  expires_at,
-  is_active
-`)
-      .eq("access_code", accessCode.toUpperCase())
-      .eq("is_active", true)
-      .single();
+  .from("temporary_files")
+  .select("*")
+  .eq("access_code", accessCode.toUpperCase())
+  .eq("is_active", true);
 
-    if (error || !data) {
+    if (error || !data || data.length === 0) {
       return NextResponse.json(
         { error: "Invalid code" },
         { status: 404 }
@@ -33,11 +26,17 @@ export async function POST(request: Request) {
     }
 
     // Expiry check
-    if (data.expires_at && new Date(data.expires_at) < new Date()) {
+const firstFile = data[0];
+
+if (
+  firstFile.expires_at &&
+  new Date(firstFile.expires_at) < new Date()
+) {
+  const filePaths = data.map(file => file.file_path);
       const { error: storageError } =
-  await supabaseAdmin.storage
-    .from("temp-files")
-    .remove([data.file_path]);
+ await supabaseAdmin.storage
+  .from("temp-files")
+  .remove(filePaths);
 
 if (storageError) {
   console.error(
@@ -46,10 +45,13 @@ if (storageError) {
   );
 }
 
-      await supabaseAdmin
-        .from("temporary_files")
-        .delete()
-        .eq("id", data.id);
+     await supabaseAdmin
+  .from("temporary_files")
+  .delete()
+  .eq(
+    "access_code",
+    accessCode.toUpperCase()
+  );
 
       return NextResponse.json(
         { error: "File expired. Upload again." },
@@ -57,33 +59,52 @@ if (storageError) {
       );
     }
 
-    const { data: signedUrlData, error: signedUrlError } =
-      await supabaseAdmin.storage
-        .from("temp-files")
-        .createSignedUrl(data.file_path, 120, {
-          download: data.file_name,
-        });
+const files: {
+  fileName: string;
+  downloadUrl?: string;
+}[] = [];
 
-    if (signedUrlError) {
-      return NextResponse.json(
-        { error: "Failed to create download link" },
-        { status: 500 }
-      );
-    }
+for (const file of data) {
+  const {
+  data: signedUrlData,
+  error: signedUrlError,
+} = await supabaseAdmin.storage
+  .from("temp-files")
+  .createSignedUrl(
+    file.file_path,
+    3600,
+    { download: file.file_name }
+  );
+
+if (signedUrlError) {
+  continue;
+}
+
+  files.push({
+    fileName: file.file_name,
+    downloadUrl: signedUrlData?.signedUrl,
+  });
+}
+   
+
+   
+    
 
     // Mark accessed
-    await supabaseAdmin
-      .from("temporary_files")
-      .update({
-        is_accessed: true,
-      })
-      .eq("id", data.id);
+  await supabaseAdmin
+  .from("temporary_files")
+  .update({
+    is_accessed: true,
+  })
+  .eq(
+    "access_code",
+    accessCode.toUpperCase()
+  );
 
     return NextResponse.json({
-      success: true,
-      fileName: data.file_name,
-      downloadUrl: signedUrlData.signedUrl,
-    });
+  success: true,
+  files,
+});
 
   } catch {
     return NextResponse.json(

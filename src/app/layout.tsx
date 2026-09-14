@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "vanishly",
+  title: "VanishlyShare",
   description: "Transfer files between devices without login",
    verification: {
     google: "1QNr2Exmc203RaY9IuRpgsbDOtfMvUhz-cF70vDoSjM",

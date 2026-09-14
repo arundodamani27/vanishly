@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { nanoid } from "nanoid";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { customAlphabet } from "nanoid";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
@@ -38,6 +38,25 @@ function isBlockedFile(name: string) {
   );
 }
 
+const generateCode = customAlphabet(
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+  6
+);
+
+let accessCode = "";
+let exists = true;
+
+while (exists) {
+  accessCode = generateCode();
+
+  const { data } = await supabaseAdmin
+    .from("temporary_files")
+    .select("access_code")
+    .eq("access_code", accessCode)
+    .maybeSingle();
+
+  exists = !!data;
+}
 export async function POST(request: Request) {
   try {
     const formData = await request.formData();
@@ -77,7 +96,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const accessCode = nanoid(6).toUpperCase();
+
     const sanitizedName = sanitizeFileName(file.name);
     const filePath = `${accessCode}/${sanitizedName}`;
 

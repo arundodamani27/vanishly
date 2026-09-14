@@ -12,7 +12,7 @@ export default function Navbar() {
           </svg>
         </div>
         <span className="font-black text-lg tracking-tight text-white">
-          vanishly<span className="text-[#4fffb0]">share</span>
+          Vanishly<span className="text-[#4fffb0]">Share</span>
         </span>
       </Link>
 
