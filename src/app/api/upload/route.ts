@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
 import { customAlphabet } from "nanoid";
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 const MAX_FILES = 10; // sanity cap per batch
 
 const BLOCKED_EXTENSIONS = [
@@ -80,7 +80,7 @@ export async function POST(request: Request) {
       }
 
       if (file.size > MAX_FILE_SIZE) {
-        skipped.push(`${file.name} (exceeds 100MB limit)`);
+        skipped.push(`${file.name} (exceeds 50MB limit)`);
         continue;
       }
 
