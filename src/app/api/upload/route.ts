@@ -64,6 +64,7 @@ export async function POST(request: Request) {
       fileSize: number;
       mimeType: string;
     }[] = [];
+    
     const skipped: string[] = [];
 
     for (let i = 0; i < files.length; i++) {
