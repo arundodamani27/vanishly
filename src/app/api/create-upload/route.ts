@@ -1,7 +1,32 @@
 import { NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/server";
+import { customAlphabet } from "nanoid";
 
 
+const generateCode = customAlphabet(
+  "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789",
+  6
+);
+
+
+async function generateUniqueCode() {
+  let accessCode = "";
+  let exists = true;
+
+  while (exists) {
+    accessCode = generateCode();
+
+    const { data } = await supabaseAdmin
+      .from("temporary_files")
+      .select("access_code")
+      .eq("access_code", accessCode)
+      .maybeSingle();
+
+    exists = !!data;
+  }
+
+  return accessCode;
+}
 export async function POST(request: Request) {
   try {
 
@@ -31,10 +56,11 @@ if (filePaths.length > 0) {
       .lt("expires_at", now);
 
     
-   const { accessCode, files } = await request.json();
+   const { files } = await request.json();
+
+   const accessCode = await generateUniqueCode();
 
     if (
-  !accessCode ||
   !files ||
   !Array.isArray(files) ||
   files.length === 0

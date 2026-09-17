@@ -2,6 +2,7 @@
 
 import { QRCodeCanvas } from "qrcode.react";
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 import { useDropzone } from "react-dropzone";
 import {
   UploadCloud,
@@ -14,7 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024;
+const MAX_FILE_SIZE = 50 * 1024 * 1024;
 
 interface UploadResponse {
   success: boolean;
@@ -48,51 +49,64 @@ export default function UploadCard() {
     setIsAccessed(false);
     setExpired(false);
     setSelectedFiles(files);
+try {
+  const uploadedFiles = [];
 
-    const formData = new FormData();
-    files.forEach((file) => formData.append("files", file));
+  let completed = 0;
 
-    try {
-      const data = await new Promise<UploadResponse>((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open("POST", "/api/upload");
+  for (const file of files) {
+    const filePath = `temp/${Date.now()}-${file.name}`;
 
-        xhr.upload.onprogress = (event) => {
-          if (event.lengthComputable) {
-            setProgress(Math.round((event.loaded / event.total) * 100));
-          }
-        };
+    const { error } = await supabase.storage
+      .from("temp-files")
+      .upload(filePath, file);
 
-        xhr.onload = () => {
-          try {
-            const parsed = JSON.parse(xhr.responseText);
-            if (xhr.status >= 200 && xhr.status < 300 && parsed.success) {
-              resolve(parsed);
-            } else {
-              reject(new Error(parsed.error || "Upload failed"));
-            }
-          } catch {
-            reject(new Error("Unexpected server response"));
-          }
-        };
+    if (error) {
+      throw new Error(error.message);
+    }
 
-        xhr.onerror = () => reject(new Error("Network error during upload"));
+    completed++;
 
-        xhr.send(formData);
-      });
+    setProgress(
+      Math.round((completed / files.length) * 100)
+    );
 
-      setProgress(100);
-      setAccessCode(data.accessCode);
+    uploadedFiles.push({
+      fileName: file.name,
+      filePath,
+      fileSize: file.size,
+      mimeType: file.type || "application/octet-stream",
+    });
+  }
 
-      if (data.skipped && data.skipped.length > 0) {
-        setMessage(
-          `${data.uploaded.length} uploaded. Skipped: ${data.skipped.join(", ")}`
-        );
-        setMessageType("error");
-      } else {
-        setMessage(`${data.uploaded.length} files uploaded successfully`);
-        setMessageType("success");
-      }
+  const response = await fetch("/api/create-upload", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      files: uploadedFiles,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!data.success) {
+    throw new Error(
+      data.error || "Failed to create upload"
+    );
+  }
+
+  setProgress(100);
+  setAccessCode(data.accessCode);
+
+  setMessage(
+    `${uploadedFiles.length} files uploaded successfully`
+  );
+
+  setMessageType("success");
+
+    
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "Upload failed");
       setMessageType("error");
@@ -228,6 +242,7 @@ export default function UploadCard() {
       </div>
 
       {!accessCode && (
+
         <>
           <div
             {...getRootProps()}

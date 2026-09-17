@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/server";
 import { customAlphabet } from "nanoid";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
-const MAX_FILES = 10; // sanity cap per batch
+const MAX_FILES = 20; // sanity cap per batch
 
 const BLOCKED_EXTENSIONS = [
   ".exe", ".msi", ".bat", ".cmd", ".scr", ".com", ".dll", ".sys",
